@@ -232,15 +232,15 @@
         {
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:Aplom - Tarantus and SAP Integration Service"
-        "ProductCode" = "8:{39DE36A6-BBAB-4E3D-A448-BB3EB7AFC8AB}"
-        "PackageCode" = "8:{E1573A54-46B3-4700-9637-7554989A9D62}"
+        "ProductCode" = "8:{8DCDFCAE-62A5-41FF-BFB3-5E754B7AF743}"
+        "PackageCode" = "8:{F3892457-3F35-450F-ACD4-156DA1A4F583}"
         "UpgradeCode" = "8:{88CE8589-65DA-48ED-A06A-AAE4F75AA311}"
         "AspNetVersion" = "8:4.0.30319.0"
         "RestartWWWService" = "11:FALSE"
         "RemovePreviousVersions" = "11:TRUE"
         "DetectNewerInstalledVersion" = "11:TRUE"
-        "InstallAllUsers" = "11:FALSE"
-        "ProductVersion" = "8:1.0.0"
+        "InstallAllUsers" = "11:TRUE"
+        "ProductVersion" = "8:1.0.1"
         "Manufacturer" = "8:Aplom"
         "ARPHELPTELEPHONE" = "8:"
         "ARPHELPLINK" = "8:"
@@ -754,7 +754,7 @@
         {
             "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_DCEDEB2C0CFA4F139BDCC2E06CF32A28"
             {
-            "SourcePath" = "8:..\\TarantusSAPService\\obj\\x86\\Debug\\TarantusSAPService.exe"
+            "SourcePath" = "8:..\\TarantusSAPService\\obj\\Debug\\TarantusSAPService.exe"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_0E34A1569DF145A480E778D9EA9BE404"

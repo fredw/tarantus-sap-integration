@@ -41,7 +41,7 @@ namespace TarantusSAPService.Task
                     // Get last DocNum from ORDR table
                     SqlCommand CommandLastOrdr = Database.ExecuteCommand("SELECT TOP 1 DocNum FROM ORDR ORDER BY DocNum desc", Connection);
                     int DocNumNext = Int32.Parse(CommandLastOrdr.ExecuteScalar().ToString()) + 1;
-                
+
                     // Create the order object and set his properties
                     SAPbobsCOM.Documents Order = oCompany.GetBusinessObject(SAPbobsCOM.BoObjectTypes.oOrders);
                     //if (!Order.GetByKey(DocEntry)) {}
@@ -55,15 +55,21 @@ namespace TarantusSAPService.Task
                     Order.DocDate = orders.GetDateTime(orders.GetOrdinal("DocDate"));
                     Order.TaxDate = orders.GetDateTime(orders.GetOrdinal("DocDate"));
                     Order.DocDueDate = orders.GetDateTime(orders.GetOrdinal("DeliveryDate"));
-                    Order.NumAtCard = orders.GetString(orders.GetOrdinal("ClientOrderNum"));
+                    if (!orders.IsDBNull(orders.GetOrdinal("ClientOrderNum"))) {
+                        Order.NumAtCard = orders.GetString(orders.GetOrdinal("ClientOrderNum"));
+                    }                    
                     Order.Comments = orders.GetString(orders.GetOrdinal("Observation"));
                     Order.SalesPersonCode = orders.GetInt32(orders.GetOrdinal("SlpCode"));
                     Order.GroupNumber = orders.GetInt32(orders.GetOrdinal("PaymentCondition"));
                     Order.UserFields.Fields.Item("U_LstNum").Value = orders.GetInt32(orders.GetOrdinal("PriceTable"));
-                    Order.UserFields.Fields.Item("U_Desc_Global").Value = Double.Parse(orders.GetDecimal(orders.GetOrdinal("DiscountPrice")).ToString());
-                    Order.TaxExtension.Carrier = orders.GetString(orders.GetOrdinal("Carrier"));
+                    if (!orders.IsDBNull(orders.GetOrdinal("ClientOrderNum"))) {
+                        Order.UserFields.Fields.Item("U_Desc_Global").Value = Double.Parse(orders.GetDecimal(orders.GetOrdinal("DiscountPrice")).ToString());
+                    }                    
+                    if (!orders.IsDBNull(orders.GetOrdinal("Carrier"))) {
+                        Order.TaxExtension.Carrier = orders.GetString(orders.GetOrdinal("Carrier"));
+                    }                    
                     Order.TaxExtension.Incoterms = orders.GetInt32(orders.GetOrdinal("Shipping")).ToString();
-
+                    
                     // Select temporary itens from this temporary order
                     SqlCommand CommandOrderItens = Database.ExecuteCommand(
                         "SELECT DocEntry, LineNum, ItemCode, Quantity, PriceUnitFinal " +
@@ -73,7 +79,7 @@ namespace TarantusSAPService.Task
                     );
                     CommandOrderItens.Parameters.AddWithValue("@DocEntry", orders.GetInt32(orders.GetOrdinal("DocEntry")));
                     SqlDataReader orderItens = CommandOrderItens.ExecuteReader();
-
+                    
                     int line = 0;
                     while (orderItens.Read())
                     {
@@ -93,7 +99,7 @@ namespace TarantusSAPService.Task
                         //Order.Lines.ItemDescription = "";
                         line++;
                     }
-
+                    
                     // Order error
                     if (Order.Add() != 0)
                     {
