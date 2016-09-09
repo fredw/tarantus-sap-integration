@@ -7,6 +7,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TarantusSAPService", "Taran
 EndProject
 Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "TarantusSAPServiceSetup", "TarantusSAPServiceSetup\ServiceSetup.vdproj", "{E4CE44DF-84DC-4D29-B856-8FFE542B997A}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{ECBEBAD0-8042-4C11-86B9-D362EB255F78}"
+	ProjectSection(SolutionItems) = preProject
+		.gitignore = .gitignore
+		README.md = README.md
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
