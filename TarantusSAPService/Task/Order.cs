@@ -28,7 +28,7 @@ namespace TarantusSAPService.Task
                 "WHERE Status = @Status",
                 Connection
             );
-            CommandOrder.Parameters.AddWithValue("@Status", "X"); // @TODO: change to "O"
+            CommandOrder.Parameters.AddWithValue("@Status", "O");
             SqlDataReader orders = CommandOrder.ExecuteReader();
 
             if (!orders.HasRows)
@@ -62,7 +62,7 @@ namespace TarantusSAPService.Task
                     Order.SalesPersonCode = orders.GetInt32(orders.GetOrdinal("SlpCode"));
                     Order.GroupNumber = orders.GetInt32(orders.GetOrdinal("PaymentCondition"));
                     Order.UserFields.Fields.Item("U_LstNum").Value = orders.GetInt32(orders.GetOrdinal("PriceTable"));
-                    if (!orders.IsDBNull(orders.GetOrdinal("ClientOrderNum"))) {
+                    if (!orders.IsDBNull(orders.GetOrdinal("DiscountPrice"))) {
                         Order.UserFields.Fields.Item("U_Desc_Global").Value = Double.Parse(orders.GetDecimal(orders.GetOrdinal("DiscountPrice")).ToString());
                     }                    
                     if (!orders.IsDBNull(orders.GetOrdinal("Carrier"))) {
