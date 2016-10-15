@@ -38,13 +38,31 @@ namespace TarantusSAPService.Task
             {
                 while (orders.Read())
                 {
+                    // Customer
+                    SAPbobsCOM.BusinessPartners Customer = oCompany.GetBusinessObject(SAPbobsCOM.BoObjectTypes.oBusinessPartners);
+
+                    // Try to find customer
+                    if (!Customer.GetByKey(orders.GetString(orders.GetOrdinal("CardCode"))))
+                    {
+                        throw new System.Exception("Order #" + orders.GetInt32(orders.GetOrdinal("DocEntry")) + " customer not found: " + orders.GetString(orders.GetOrdinal("CardCode")));
+                    } else
+                    {
+                        // Update customer price table
+                        Customer.PriceListNum = orders.GetInt32(orders.GetOrdinal("PriceTable"));
+                        Customer.Update();
+
+                        if (Customer.Update() != 0)
+                        {
+                            throw new System.Exception("Order #" + orders.GetInt32(orders.GetOrdinal("DocEntry")) + " error to update customer price table: " + oCompany.GetLastErrorDescription());
+                        }
+                    }
+
                     // Get last DocNum from ORDR table
                     SqlCommand CommandLastOrdr = Database.ExecuteCommand("SELECT TOP 1 DocNum FROM ORDR ORDER BY DocNum desc", Connection);
                     int DocNumNext = Int32.Parse(CommandLastOrdr.ExecuteScalar().ToString()) + 1;
 
                     // Create the order object and set his properties
                     SAPbobsCOM.Documents Order = oCompany.GetBusinessObject(SAPbobsCOM.BoObjectTypes.oOrders);
-                    //if (!Order.GetByKey(DocEntry)) {}
                     Order.DocType = SAPbobsCOM.BoDocumentTypes.dDocument_Items;
                     Order.HandWritten = SAPbobsCOM.BoYesNoEnum.tNO;
                     Order.BPL_IDAssignedToInvoice = 1; // First business place (to multibranch companies)
@@ -62,9 +80,10 @@ namespace TarantusSAPService.Task
                     Order.SalesPersonCode = orders.GetInt32(orders.GetOrdinal("SlpCode"));
                     Order.GroupNumber = orders.GetInt32(orders.GetOrdinal("PaymentCondition"));
                     Order.UserFields.Fields.Item("U_LstNum").Value = orders.GetInt32(orders.GetOrdinal("PriceTable"));
+                    Order.UserFields.Fields.Item("U_Paciente").Value = orders.GetInt32(orders.GetOrdinal("PriceTable")).ToString();
                     if (!orders.IsDBNull(orders.GetOrdinal("DiscountPrice"))) {
                         Order.UserFields.Fields.Item("U_Desc_Global").Value = Double.Parse(orders.GetDecimal(orders.GetOrdinal("DiscountPrice")).ToString());
-                    }                    
+                    }
                     if (!orders.IsDBNull(orders.GetOrdinal("Carrier"))) {
                         Order.TaxExtension.Carrier = orders.GetString(orders.GetOrdinal("Carrier"));
                     }                    
@@ -85,18 +104,33 @@ namespace TarantusSAPService.Task
                     {
                         if (line != 0)
                         {
+                            // Create new item line
                             Order.Lines.Add();
                         }
 
-                        // Create the item object and set his properties
+                        // Select item default wharehouse
+                        SqlCommand CommandItem = Database.ExecuteCommand("SELECT DfltWH FROM OITM WHERE ItemCode = @ItemCode", Connection);
+                        CommandItem.Parameters.AddWithValue("@ItemCode", orderItens.GetString(orderItens.GetOrdinal("ItemCode")));
+                        SqlDataReader item = CommandItem.ExecuteReader(System.Data.CommandBehavior.SingleRow);
+
+                        if (!item.Read())
+                        {
+                            throw new System.Exception("Order #" + orders.GetInt32(orders.GetOrdinal("DocEntry")) + " error: item not found on OITM: " + orderItens.GetString(orderItens.GetOrdinal("ItemCode")));
+                        }
+
+                        // Set item properties 
+                        // Observation 1: Price doesn`t need to be setted because its loaded by customer price table (OCRD.ListNum)
+                        // Observation 2: LineTotal doesn`t need to be setted because its automatically calculated (Quantity * Price)
                         Order.Lines.BaseLine = line;
                         Order.Lines.ItemCode = orderItens.GetString(orderItens.GetOrdinal("ItemCode"));
+                        Order.Lines.WarehouseCode = item.GetString(item.GetOrdinal("DfltWH"));
                         Order.Lines.Quantity = orderItens.GetInt32(orderItens.GetOrdinal("Quantity"));
-                        Order.Lines.Price = Double.Parse(orderItens.GetDecimal(orderItens.GetOrdinal("PriceUnitFinal")).ToString());
                         Order.Lines.TaxCode = "";
-                        Order.Lines.LineTotal = Order.Lines.Price * Order.Lines.Quantity;
-                        //Order.Lines.SetCurrentLine(line);
-                        //Order.Lines.ItemDescription = "";
+                        if (!orders.IsDBNull(orders.GetOrdinal("DiscountPrice")))
+                        {
+                            Order.Lines.DiscountPercent = Double.Parse(orders.GetDecimal(orders.GetOrdinal("DiscountPrice")).ToString());
+                        }
+                        
                         line++;
                     }
                     
@@ -107,11 +141,9 @@ namespace TarantusSAPService.Task
                         if (oCompany.GetLastErrorCode() == -4006)
                         {
                             throw new System.Exception("Order #" + orders.GetInt32(orders.GetOrdinal("DocEntry")) + " error: Currency Exchange - exchange rate has not been set for today. set the exchange rate");
-                        } else
-                        {
-                            throw new System.Exception("Order #" + orders.GetInt32(orders.GetOrdinal("DocEntry")) + " error: " + oCompany.GetLastErrorDescription());
                         }
-                        // Order success
+                        throw new System.Exception("Order #" + orders.GetInt32(orders.GetOrdinal("DocEntry")) + " error: " + oCompany.GetLastErrorDescription());
+                    // Order success
                     } else
                     {
                         // Change status of this temporary order to Closed
