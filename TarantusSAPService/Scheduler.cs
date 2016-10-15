@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Configuration;
 using System.ServiceProcess;
 using System.Timers;
 using System.Data.SqlClient;
@@ -20,9 +21,17 @@ namespace TarantusSAPService
         /// <param name="args"></param>
         protected override void OnStart(string[] args)
         {
-            // Create a timer to excute every 30 seconds
+            // Default interval: 30 seconds
+            int interval = 30;
+
+            if (!int.TryParse(ConfigurationManager.AppSettings["Scheduler.Interval"].ToString(), out interval))
+            {
+                LogWriter.write("Error: invalid Scheduler.Interval. It was assumed the default value of 30 seconds");
+            }
+
+            // Create a timer to excute periodically
             timer = new System.Timers.Timer();
-            timer.Interval = 30000;
+            timer.Interval = interval * 1000;
             timer.Elapsed += new ElapsedEventHandler(this.TimerTick);
             timer.Enabled = true;
             LogWriter.write("Service started");
