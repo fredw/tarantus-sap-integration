@@ -1,19 +1,20 @@
 ﻿using System;
 using System.Data.SqlClient;
+using TarantusSAPService.Exception;
 
 namespace TarantusSAPService.Task
 {
     public static class Order
     {
-        public static void Execute(SAPbobsCOM.Company oCompany, SqlConnection Connection)
+        public static void Execute(SAPbobsCOM.Company company, SqlConnection connection)
         {
             // Select OPEN orders from temporary table
-            SqlCommand CommandOrder = Database.ExecuteCommand(
+            SqlCommand commandOrder = Database.ExecuteCommand(
                 "SELECT " +
                     "DocEntry, " +
                     "CardCode, " +
-                    "CardCodeCharge, " +
-                    "CardCodeDelivery, " +
+                    "AddressCharge, " +
+                    "AddressDelivery, " +
                     "DocDate, " +
                     "DeliveryDate, " +
                     "DiscountPrice, " +
@@ -26,134 +27,162 @@ namespace TarantusSAPService.Task
                     "Shipping " +
                 "FROM [@Order] " +
                 "WHERE Status = @Status",
-                Connection
+                connection
             );
-            CommandOrder.Parameters.AddWithValue("@Status", "O");
-            SqlDataReader orders = CommandOrder.ExecuteReader();
+            commandOrder.Parameters.AddWithValue("@Status", "O");
+            SqlDataReader orders = commandOrder.ExecuteReader();
 
             if (!orders.HasRows)
             {
                 LogWriter.write("There is no open orders to import.");
-            } else
+                return;
+            }
+
+            while (orders.Read())
             {
-                while (orders.Read())
+                try
                 {
                     // Customer
-                    SAPbobsCOM.BusinessPartners Customer = oCompany.GetBusinessObject(SAPbobsCOM.BoObjectTypes.oBusinessPartners);
+                    SAPbobsCOM.BusinessPartners customer = company.GetBusinessObject(SAPbobsCOM.BoObjectTypes.oBusinessPartners);
 
                     // Try to find customer
-                    if (!Customer.GetByKey(orders.GetString(orders.GetOrdinal("CardCode"))))
+                    if (!customer.GetByKey((string) orders["CardCode"]))
                     {
-                        throw new System.Exception("Order #" + orders.GetInt32(orders.GetOrdinal("DocEntry")) + " customer not found: " + orders.GetString(orders.GetOrdinal("CardCode")));
-                    } else
-                    {
-                        // Update customer price table
-                        Customer.PriceListNum = orders.GetInt32(orders.GetOrdinal("PriceTable"));
-                        Customer.Update();
+                        throw new SAPObjectException("Customer not found " + orders["CardCode"] + " (OCRD.CardCode)", (int) orders["DocEntry"]);
+                    }
 
-                        if (Customer.Update() != 0)
-                        {
-                            throw new System.Exception("Order #" + orders.GetInt32(orders.GetOrdinal("DocEntry")) + " error to update customer price table: " + oCompany.GetLastErrorDescription());
-                        }
+                    // Update customer price table and payment condition
+                    customer.PriceListNum = (int) orders["PriceTable"];
+                    customer.PayTermsGrpCode = (int) orders["PaymentCondition"];
+                    customer.Update();
+
+                    if (customer.Update() != 0)
+                    {
+                        throw new SAPObjectException("Error to update customer " + orders["CardCode"] + " - " + company.GetLastErrorDescription(), (int) orders["DocEntry"]);
                     }
 
                     // Get last DocNum from ORDR table
-                    SqlCommand CommandLastOrdr = Database.ExecuteCommand("SELECT TOP 1 DocNum FROM ORDR ORDER BY DocNum desc", Connection);
-                    int DocNumNext = Int32.Parse(CommandLastOrdr.ExecuteScalar().ToString()) + 1;
+                    SqlCommand commandLastOrdr = Database.ExecuteCommand("SELECT TOP 1 DocNum FROM ORDR ORDER BY DocNum desc", connection);
+                    int docNumNext = Int32.Parse(commandLastOrdr.ExecuteScalar().ToString()) + 1;
+
+                    Double discountPrice = orders.IsDBNull(orders.GetOrdinal("DiscountPrice")) ? 0 : Double.Parse(((decimal) orders["DiscountPrice"]).ToString());
 
                     // Create the order object and set his properties
-                    SAPbobsCOM.Documents Order = oCompany.GetBusinessObject(SAPbobsCOM.BoObjectTypes.oOrders);
-                    Order.DocType = SAPbobsCOM.BoDocumentTypes.dDocument_Items;
-                    Order.HandWritten = SAPbobsCOM.BoYesNoEnum.tNO;
-                    Order.BPL_IDAssignedToInvoice = 1; // First business place (to multibranch companies)
-                    Order.DocNum = DocNumNext;
-                    Order.CardCode = orders.GetString(orders.GetOrdinal("CardCode"));
-                    Order.PayToCode = orders.GetString(orders.GetOrdinal("CardCodeCharge"));
-                    Order.ShipToCode = orders.GetString(orders.GetOrdinal("CardCodeDelivery"));
-                    Order.DocDate = orders.GetDateTime(orders.GetOrdinal("DocDate"));
-                    Order.TaxDate = orders.GetDateTime(orders.GetOrdinal("DocDate"));
-                    Order.DocDueDate = orders.GetDateTime(orders.GetOrdinal("DeliveryDate"));
-                    if (!orders.IsDBNull(orders.GetOrdinal("ClientOrderNum"))) {
-                        Order.NumAtCard = orders.GetString(orders.GetOrdinal("ClientOrderNum"));
-                    }                    
-                    Order.Comments = orders.GetString(orders.GetOrdinal("Observation"));
-                    Order.SalesPersonCode = orders.GetInt32(orders.GetOrdinal("SlpCode"));
-                    Order.GroupNumber = orders.GetInt32(orders.GetOrdinal("PaymentCondition"));
-                    Order.UserFields.Fields.Item("U_LstNum").Value = orders.GetInt32(orders.GetOrdinal("PriceTable"));
-                    Order.UserFields.Fields.Item("U_Paciente").Value = orders.GetInt32(orders.GetOrdinal("PriceTable")).ToString();
-                    if (!orders.IsDBNull(orders.GetOrdinal("DiscountPrice"))) {
-                        Order.UserFields.Fields.Item("U_Desc_Global").Value = Double.Parse(orders.GetDecimal(orders.GetOrdinal("DiscountPrice")).ToString());
-                    }
-                    if (!orders.IsDBNull(orders.GetOrdinal("Carrier"))) {
-                        Order.TaxExtension.Carrier = orders.GetString(orders.GetOrdinal("Carrier"));
-                    }                    
-                    Order.TaxExtension.Incoterms = orders.GetInt32(orders.GetOrdinal("Shipping")).ToString();
-                    
+                    SAPbobsCOM.Documents order = company.GetBusinessObject(SAPbobsCOM.BoObjectTypes.oOrders);
+                    order.DocType = SAPbobsCOM.BoDocumentTypes.dDocument_Items;
+                    order.HandWritten = SAPbobsCOM.BoYesNoEnum.tNO;
+                    order.BPL_IDAssignedToInvoice = 1; // First business place (for multibranch companies)
+                    order.DocNum = docNumNext;
+                    order.CardCode = (string) orders["CardCode"];
+                    order.PayToCode = (string) orders["AddressCharge"];
+                    order.ShipToCode = (string) orders["AddressDelivery"];
+                    order.DocDate = (DateTime) orders["DocDate"];
+                    order.TaxDate = (DateTime) orders["DocDate"];
+                    order.DocDueDate = (DateTime) orders["DeliveryDate"];
+                    order.NumAtCard = orders.IsDBNull(orders.GetOrdinal("ClientOrderNum")) ? null : (string) orders["ClientOrderNum"];
+                    order.Comments = (string) orders["Observation"];
+                    order.SalesPersonCode = (int) orders["SlpCode"];
+                    order.GroupNumber = (int) orders["PaymentCondition"];
+                    order.TaxExtension.Carrier = orders.IsDBNull(orders.GetOrdinal("Carrier")) ? null : (string) orders["Carrier"];
+                    order.TaxExtension.Incoterms = orders["Shipping"].ToString();
+                    // Custom fields
+                    order.UserFields.Fields.Item("U_LstNum").Value = (int) orders["PriceTable"];
+                    order.UserFields.Fields.Item("U_Paciente").Value = ((int) orders["PriceTable"]).ToString();
+                    order.UserFields.Fields.Item("U_Desc_Global").Value = discountPrice;
+
                     // Select temporary itens from this temporary order
-                    SqlCommand CommandOrderItens = Database.ExecuteCommand(
+                    SqlCommand commandOrderItens = Database.ExecuteCommand(
                         "SELECT DocEntry, LineNum, ItemCode, Quantity, PriceUnitFinal " +
                         "FROM [@OrderItem] " +
                         "WHERE DocEntry = @DocEntry",
-                        Connection
+                        connection
                     );
-                    CommandOrderItens.Parameters.AddWithValue("@DocEntry", orders.GetInt32(orders.GetOrdinal("DocEntry")));
-                    SqlDataReader orderItens = CommandOrderItens.ExecuteReader();
-                    
+                    commandOrderItens.Parameters.AddWithValue("@DocEntry", (int) orders["DocEntry"]);
+                    SqlDataReader orderItens = commandOrderItens.ExecuteReader();
+
                     int line = 0;
                     while (orderItens.Read())
                     {
                         if (line != 0)
                         {
                             // Create new item line
-                            Order.Lines.Add();
+                            order.Lines.Add();
                         }
 
                         // Select item default wharehouse
-                        SqlCommand CommandItem = Database.ExecuteCommand("SELECT DfltWH FROM OITM WHERE ItemCode = @ItemCode", Connection);
-                        CommandItem.Parameters.AddWithValue("@ItemCode", orderItens.GetString(orderItens.GetOrdinal("ItemCode")));
-                        SqlDataReader item = CommandItem.ExecuteReader(System.Data.CommandBehavior.SingleRow);
+                        SqlCommand commandItem = Database.ExecuteCommand("SELECT DfltWH FROM OITM WHERE ItemCode = @ItemCode", connection);
+                        commandItem.Parameters.AddWithValue("@ItemCode", (string) orderItens["ItemCode"]);
+                        SqlDataReader item = commandItem.ExecuteReader(System.Data.CommandBehavior.SingleRow);
 
+                        // If not found item on database
                         if (!item.Read())
                         {
-                            throw new System.Exception("Order #" + orders.GetInt32(orders.GetOrdinal("DocEntry")) + " error: item not found on OITM: " + orderItens.GetString(orderItens.GetOrdinal("ItemCode")));
+                            throw new SAPObjectException("Item not found " + orderItens["ItemCode"] + " (OITM.ItemCode)", (int) orders["DocEntry"]);
+                        }
+                        // If item doesn't have a default wharehouse defined
+                        else if (item.IsDBNull(item.GetOrdinal("DfltWH")))
+                        {
+                            throw new SAPObjectException("Item " + orderItens["ItemCode"] + " hasn't default wharehouse defined (OITM.DfltWH)", (int) orders["DocEntry"]);
                         }
 
                         // Set item properties 
                         // Observation 1: Price doesn`t need to be setted because its loaded by customer price table (OCRD.ListNum)
                         // Observation 2: LineTotal doesn`t need to be setted because its automatically calculated (Quantity * Price)
-                        Order.Lines.BaseLine = line;
-                        Order.Lines.ItemCode = orderItens.GetString(orderItens.GetOrdinal("ItemCode"));
-                        Order.Lines.WarehouseCode = item.GetString(item.GetOrdinal("DfltWH"));
-                        Order.Lines.Quantity = orderItens.GetInt32(orderItens.GetOrdinal("Quantity"));
-                        Order.Lines.TaxCode = "";
-                        if (!orders.IsDBNull(orders.GetOrdinal("DiscountPrice")))
-                        {
-                            Order.Lines.DiscountPercent = Double.Parse(orders.GetDecimal(orders.GetOrdinal("DiscountPrice")).ToString());
-                        }
-                        
+                        order.Lines.BaseLine = line;
+                        order.Lines.ItemCode = (string) orderItens["ItemCode"];
+                        order.Lines.WarehouseCode = (string) item["DfltWH"];
+                        order.Lines.Quantity = (int) orderItens["Quantity"];
+                        order.Lines.TaxCode = "";
+                        order.Lines.DiscountPercent = discountPrice;
+
                         line++;
                     }
-                    
+
                     // Order error
-                    if (Order.Add() != 0)
+                    if (order.Add() != 0)
                     {
                         // If the currency exchange is not setted
-                        if (oCompany.GetLastErrorCode() == -4006)
+                        if (company.GetLastErrorCode() == -4006)
                         {
-                            throw new System.Exception("Order #" + orders.GetInt32(orders.GetOrdinal("DocEntry")) + " error: Currency Exchange - exchange rate has not been set for today. set the exchange rate");
+                            throw new SAPObjectException("Currency Exchange rate hasn't been set", (int) orders["DocEntry"]);
                         }
-                        throw new System.Exception("Order #" + orders.GetInt32(orders.GetOrdinal("DocEntry")) + " error: " + oCompany.GetLastErrorDescription());
-                    // Order success
-                    } else
-                    {
-                        // Change status of this temporary order to Closed
-                        SqlCommand CommandUpdate = Database.ExecuteCommand("UPDATE [@Order] SET Status = @Status WHERE DocEntry = @DocEntry", Connection);
-                        CommandUpdate.Parameters.AddWithValue("@Status", "C");
-                        CommandUpdate.Parameters.AddWithValue("@DocEntry", orders.GetInt32(orders.GetOrdinal("DocEntry")));
-                        CommandUpdate.ExecuteNonQuery();
-                        // Log success
-                        LogWriter.write("Order #" + DocNumNext.ToString() + " (ORDR.DocNum) imported sucessfully!");
+                        throw new SAPObjectException("Error to save order - " + company.GetLastErrorDescription(), (int) orders["DocEntry"]);
                     }
+
+                    // Order success
+                    // Change status of this temporary order to Closed
+                    SqlCommand commandUpdate = Database.ExecuteCommand("UPDATE [@Order] SET Status = @Status WHERE DocEntry = @DocEntry", connection);
+                    commandUpdate.Parameters.AddWithValue("@Status", "C");
+                    commandUpdate.Parameters.AddWithValue("@DocEntry", (int) orders["DocEntry"]);
+                    commandUpdate.ExecuteNonQuery();
+                    LogWriter.write("Temporary order #" + orders["DocEntry"] + " imported sucessfully! Generated order: #" + docNumNext + " (ORDR.DocNum)");
+
+                } catch (System.Exception ex)
+                {
+                    string message = ex.Message;
+                    if (ex is SAPObjectException)
+                    {
+                        SAPObjectException exSap = (SAPObjectException) ex;
+                        message = exSap.getFormattedMessage();
+                    }
+
+                    // Change status of this temporary order to Error
+                    SqlCommand commandUpdate = Database.ExecuteCommand("UPDATE [@Order] SET Status = @Status WHERE DocEntry = @DocEntry", connection);
+                    commandUpdate.Parameters.AddWithValue("@Status", "E");
+                    commandUpdate.Parameters.AddWithValue("@DocEntry", (int) orders["DocEntry"]);
+                    commandUpdate.ExecuteNonQuery();
+
+                    // Add new error record
+                    SqlCommand commandError = Database.ExecuteCommand("INSERT INTO [@OrderError] (DocEntry, Description, Date) VALUES (@DocEntry, @Description, @Date)", connection);
+                    commandError.Parameters.AddWithValue("@DocEntry", (int) orders["DocEntry"]);
+                    commandError.Parameters.AddWithValue("@Description", message);
+                    commandError.Parameters.AddWithValue("@Date", DateTime.Now);
+                    commandError.ExecuteNonQuery();
+
+                    // Send e-mail with error detail
+                    Email.Send("Order error", message);
+
+                    throw new System.Exception(message, ex);
                 }
             }
         }

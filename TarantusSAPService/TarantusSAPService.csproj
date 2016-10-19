@@ -88,7 +88,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Email.cs" />
     <Compile Include="Database.cs" />
+    <Compile Include="Exception\SAPObjectException.cs" />
     <Compile Include="Exception\CriticalException.cs" />
     <Compile Include="Task\Order.cs" />
     <Compile Include="Company.cs" />

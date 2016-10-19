@@ -54,44 +54,44 @@ namespace TarantusSAPService
         /// <param name="e"></param>
         private void TimerTick(object sender, ElapsedEventArgs e)
         {
-            SAPbobsCOM.Company oCompany = null;
-            SqlConnection Connection = null;
+            SAPbobsCOM.Company company = null;
+            SqlConnection connection = null;
 
             try
             {               
                 // Get SAP company and database connection
-                oCompany = Company.GetCompany();
-                Connection = Database.GetConnection();
+                company = Company.GetCompany();
+                connection = Database.GetConnection();
                 
-                if (oCompany.Connected)
+                if (company.Connected)
                 {
                     LogWriter.write("SAP Company connection successfuly!");
                     // Execute tasks
-                    Task.Order.Execute(oCompany, Connection);
+                    Task.Order.Execute(company, connection);
                 }
 
+            // When critical error occur, write log with error and stop service
             } catch (Exception.CriticalException ex)
-            {
-                // When critical error occur, write log with error and stop service
-                LogWriter.write(ex.ToString());
+            {                
+                LogWriter.write("Critical error: " + ex.ToString());
                 (new ServiceController("TarantusSAPIntegrationService")).Stop();
                 Environment.Exit(0);
                 LogWriter.write("Service stopped");
+            // When generic error occur, only write a log error
             } catch (System.Exception ex)
-            {
-                // When generic error occur, only write a log error
+            {                
                 LogWriter.write("Error: " + ex.ToString());
             } finally
             {
                 // Disconnect database
-                if (Connection != null)
+                if (connection != null)
                 {
-                    Connection.Close();
+                    connection.Close();
                 }
                 // Disconnect companmy
-                if (oCompany != null)
+                if (company != null)
                 {
-                    oCompany.Disconnect();
+                    company.Disconnect();
                 }
             }            
         }

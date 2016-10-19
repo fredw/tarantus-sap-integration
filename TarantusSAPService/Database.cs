@@ -12,24 +12,24 @@ namespace TarantusSAPService
         /// <returns>SqlConnection</returns>
         public static SqlConnection GetConnection()
         {
-            String DatabaseHost = ConfigurationManager.AppSettings["Database.Host"].ToString();
-            String DatabaseUser = ConfigurationManager.AppSettings["Database.User"].ToString();
-            String DatabasePassword = ConfigurationManager.AppSettings["Database.Password"].ToString();
-            String DatabaseDatabase = ConfigurationManager.AppSettings["Database.Database"].ToString();
+            String host = ConfigurationManager.AppSettings["Database.Host"].ToString();
+            String user = ConfigurationManager.AppSettings["Database.User"].ToString();
+            String password = ConfigurationManager.AppSettings["Database.Password"].ToString();
+            String database = ConfigurationManager.AppSettings["Database.Database"].ToString();
 
-            SqlConnection Connection = null;
+            SqlConnection connection = null;
 
             try
             {
-                Connection = new SqlConnection(
-                    "Data Source=" + DatabaseHost + ";" +
-                    "Initial Catalog=" + DatabaseDatabase + ";" +
-                    "User ID=" + DatabaseUser + ";" +
-                    "Password =" + DatabasePassword + ";" +
+                connection = new SqlConnection(
+                    "Data Source=" + host + ";" +
+                    "Initial Catalog=" + database + ";" +
+                    "User ID=" + user + ";" +
+                    "Password =" + password + ";" +
                     "MultipleActiveResultSets=True;"
                 );
-                Connection.Open();
-                return Connection;
+                connection.Open();
+                return connection;
             }
             catch (System.Exception ex)
             {
