@@ -17,7 +17,7 @@ namespace TarantusSAPService.Task
 
             if (!int.TryParse(ConfigurationManager.AppSettings["Scheduler.Records.Process.Limit"].ToString(), out limit))
             {
-                LogWriter.write("Error: invalid Scheduler.Records.Process.Limit. It was assumed the default value of 30 records");
+                throw new System.Exception("Invalid Scheduler.Records.Process.Limit. It was assumed the default value of 30 records");
             }
 
             // Select OPEN orders from temporary table
@@ -57,15 +57,14 @@ namespace TarantusSAPService.Task
             List<DataRow> orders = dt.AsEnumerable().ToList();
 
             // Join all DocEntrys on a string
-            string DocEntry = string.Join(",", orders.Select(row => row["DocEntry"].ToString()).ToList());
+            string DocEntries = string.Join(",", orders.Select(row => row["DocEntry"].ToString()).ToList());
 
             // Change all OPEN orders status to "W" (Waiting) to prevent these orders to be processed twice
-            SqlCommand commandUpdateWaiting = Database.ExecuteCommand("UPDATE [@Order] SET Status = @Status WHERE DocEntry in (@DocEntry)", connection);
+            SqlCommand commandUpdateWaiting = Database.ExecuteCommand("UPDATE [@Order] SET Status = @Status WHERE DocEntry in (" + DocEntries + ")", connection);
             commandUpdateWaiting.Parameters.AddWithValue("@Status", "W");
-            commandUpdateWaiting.Parameters.AddWithValue("@DocEntry", DocEntry);
             commandUpdateWaiting.ExecuteNonQuery();
-            LogWriter.write("Changed Status of temporary orders to *Waiting*: " + DocEntry);
-            
+            LogWriter.write("Changed Status of temporary orders to *Waiting*: " + DocEntries);
+
             // Process orders
             foreach (DataRow order in orders)
             {
@@ -210,8 +209,8 @@ namespace TarantusSAPService.Task
 
                     // Send e-mail with error detail
                     Email.Send("Order error", message);
-
-                    throw new System.Exception(message, ex);
+                    // Log error
+                    LogWriter.write("Error: " + message);
                 }
             }
         }
